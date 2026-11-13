@@ -1,0 +1,9 @@
+.gradle/
+build/
+local.properties
+engine-src/
+engine-out/
+app/src/main/jniLibs/
+*.apk
+.idea/
+*.iml
