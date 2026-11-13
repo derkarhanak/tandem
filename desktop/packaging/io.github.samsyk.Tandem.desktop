@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Tandem
+GenericName=Folder Sync
+Comment=Keep folders in sync with your phone and other computers
+Exec=tandem
+Icon=io.github.samsyk.Tandem
+Terminal=false
+Categories=Network;FileTransfer;GTK;
+Keywords=sync;syncthing;files;backup;phone;
+StartupNotify=true
+StartupWMClass=io.github.samsyk.Tandem

@@ -1,0 +1,828 @@
+import { Button, Switch, LineEdit, ScrollView, Palette, CheckBox, TextEdit } from "std-widgets.slint";
+
+export struct FolderItem {
+    id: string,
+    label: string,
+    path: string,
+    state: string,
+    tone: int,
+    detail: string,
+    progress: float,
+    syncing: bool,
+    paused: bool,
+    size: string,
+    shared: string,
+}
+
+export struct DeviceItem {
+    id: string,
+    name: string,
+    status: string,
+    connected: bool,
+    phone: bool,
+    address: string,
+    folders: string,
+}
+
+export struct PendingDev { id: string, name: string, short: string }
+export struct PendingFol { id: string, label: string, device-id: string, device-name: string }
+export struct Choice { id: string, name: string, checked: bool }
+
+// 0 good · 1 busy · 2 waiting · 3 problem · 4 off
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+    out property <color> bg: dark ? #111514 : #f4f7f6;
+    out property <color> card: dark ? #1b2120 : #ffffff;
+    out property <color> card-alt: dark ? #232a29 : #eaf0ef;
+    out property <color> text: dark ? #e7ecea : #18201f;
+    out property <color> muted: dark ? #98a5a3 : #5b6967;
+    out property <color> accent: dark ? #6fd0c8 : #0e6e6b;
+    out property <color> on-accent: dark ? #00302e : #ffffff;
+    out property <color> divider: dark ? #2b3332 : #e1e8e7;
+
+    public pure function tone(t: int) -> color {
+        t == 0 ? #2e9e5b : t == 1 ? (dark ? #8aa2f0 : #4560c4) : t == 2 ? (dark ? #e0b05a : #a8700f) : t == 3 ? (dark ? #f08a80 : #c23a2f) : muted
+    }
+}
+
+component Icon inherits Image {
+    in property <color> tint: Theme.text;
+    colorize: tint;
+    width: 20px;
+    height: 20px;
+}
+
+component Bubble inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.accent;
+    in property <length> size: 40px;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: tint.with-alpha(0.15);
+    Icon { source: icon; tint: root.tint; width: size * 0.5; height: size * 0.5; }
+}
+
+component Card inherits Rectangle {
+    in property <color> tint: Theme.card;
+    callback clicked;
+    in property <bool> clickable: false;
+    vertical-stretch: 0;
+    background: ta.has-hover && clickable ? tint.mix(Theme.accent, 0.94) : tint;
+    border-radius: 18px;
+    ta := TouchArea {
+        enabled: clickable;
+        mouse-cursor: clickable ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+    @children
+}
+
+component Chip inherits Rectangle {
+    in property <string> text;
+    in property <int> tone;
+    height: 24px;
+    width: t.preferred-width + 20px;
+    border-radius: 12px;
+    background: Theme.tone(tone).with-alpha(0.16);
+    t := Text { text: root.text; color: Theme.tone(tone); font-size: 12px; font-weight: 700; }
+}
+
+component Title inherits Text {
+    color: Theme.muted;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+component Body inherits Text {
+    color: Theme.text;
+    font-size: 14px;
+    wrap: word-wrap;
+}
+
+component Muted inherits Text {
+    color: Theme.muted;
+    font-size: 13px;
+    wrap: word-wrap;
+}
+
+component ProgressLine inherits Rectangle {
+    in property <float> progress;
+    in property <color> tint: Theme.accent;
+    height: 6px;
+    border-radius: 3px;
+    background: tint.with-alpha(0.18);
+    Rectangle {
+        x: 0;
+        width: parent.width * clamp(progress, 0, 1);
+        border-radius: 3px;
+        background: tint;
+    }
+}
+
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> tip;
+    callback clicked;
+    width: 36px;
+    height: 36px;
+    border-radius: 18px;
+    background: ta.has-hover ? Theme.card-alt : transparent;
+    accessible-role: button;
+    accessible-label: tip;
+    Icon { source: icon; }
+    ta := TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component Header inherits HorizontalLayout {
+    in property <string> title;
+    in property <bool> back: true;
+    callback go-back;
+    padding-top: 12px;
+    padding-bottom: 4px;
+    spacing: 8px;
+    alignment: start;
+    if back: IconButton { icon: @image-url("icons/back.svg"); tip: "Back"; clicked => { root.go-back(); } }
+    Text { text: title; color: Theme.text; font-size: 20px; font-weight: 700; vertical-alignment: center; }
+    @children
+}
+
+component LinkButton inherits Text {
+    callback clicked;
+    in property <bool> danger: false;
+    color: danger ? Theme.tone(3) : Theme.accent;
+    font-weight: 600;
+    font-size: 14px;
+    TouchArea { mouse-cursor: pointer; clicked => { root.clicked(); } }
+}
+
+component Fact inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 2px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    Muted { text: label; }
+    Body { text: value; }
+}
+
+component SettingRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> detail;
+    in-out property <bool> checked;
+    callback toggled(bool);
+    spacing: 12px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        Body { text: label; font-weight: 600; }
+        Muted { text: detail; }
+    }
+    Switch {
+        checked <=> root.checked;
+        toggled => { root.toggled(self.checked); }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Tandem";
+    icon: @image-url("../packaging/io.github.samsyk.Tandem.svg");
+    preferred-width: 520px;
+    preferred-height: 780px;
+    min-width: 380px;
+    min-height: 480px;
+    background: Theme.bg;
+    default-font-size: 14px;
+
+    // ── state from Rust ──
+    in property <string> headline-title: "Starting up…";
+    in property <string> headline-detail: "Connecting to the sync engine.";
+    in property <int> headline-tone: 1;
+    in property <string> headline-action;
+    in property <bool> engine-running;
+    in property <[FolderItem]> folders;
+    in property <[DeviceItem]> devices;
+    in property <[PendingDev]> pending-devices;
+    in property <[PendingFol]> pending-folders;
+    in property <string> my-id;
+    in property <string> my-name;
+    in property <string> version;
+    in property <image> qr;
+    in property <FolderItem> current-folder;
+    in property <DeviceItem> current-device;
+    in-out property <[Choice]> choices;
+    in-out property <bool> sync-on: true;
+    in-out property <bool> autostart: true;
+    in property <string> engine-note;
+    in property <string> log-text;
+    in-out property <string> toast;
+
+    // 0 home · 1 pair · 2 folder · 3 device · 4 settings · 5 add folder · 6 log
+    in-out property <int> page: 0;
+
+    // dialogs
+    in-out property <bool> accept-open;
+    in-out property <PendingFol> accept-item;
+    in-out property <string> accept-path;
+    in-out property <string> add-path;
+    in-out property <string> add-label;
+    in-out property <string> confirm-title;
+    in-out property <string> confirm-body;
+    in-out property <string> confirm-button;
+    in-out property <string> confirm-action;
+    in-out property <string> rename-target;
+    in-out property <string> rename-text;
+
+    callback headline-clicked(string);
+    callback open-folder(string);
+    callback open-device(string);
+    callback toggle-sync(bool);
+    callback set-autostart(bool);
+    callback accept-device(string, string);
+    callback dismiss-device(string);
+    callback accept-folder(string, string, string, string);
+    callback dismiss-folder(string, string);
+    callback pick-folder(string);
+    callback add-device(string, string);
+    callback add-folder(string, string);
+    callback folder-pause(string, bool);
+    callback folder-rescan(string);
+    callback folder-share(string);
+    callback folder-show(string);
+    callback confirmed(string);
+    callback rename(string, string);
+    callback copy-text(string);
+    callback load-log();
+    callback prepare-choices(string);
+
+    function ask(title: string, body: string, button: string, action: string) {
+        confirm-title = title;
+        confirm-body = body;
+        confirm-button = button;
+        confirm-action = action;
+    }
+
+    Rectangle {
+        // ───────────── HOME ─────────────
+        if page == 0: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header {
+                    title: "Tandem";
+                    back: false;
+                    Rectangle { horizontal-stretch: 1; }
+                    IconButton { icon: @image-url("icons/plus.svg"); tip: "Pair a device"; clicked => { page = 1; } }
+                    IconButton { icon: @image-url("icons/folder.svg"); tip: "Add a folder"; clicked => { add-path = ""; add-label = ""; prepare-choices(""); page = 5; } }
+                    IconButton { icon: @image-url("icons/settings.svg"); tip: "Settings"; clicked => { page = 4; } }
+                }
+
+                // status
+                Card {
+                    tint: Theme.tone(headline-tone).with-alpha(Theme.dark ? 0.16 : 0.10);
+                    VerticalLayout {
+                        padding: 22px;
+                        spacing: 6px;
+                        Bubble {
+                            size: 48px;
+                            tint: Theme.tone(headline-tone);
+                            icon: headline-tone == 0 ? @image-url("icons/check.svg") : headline-tone == 1 ? @image-url("icons/sync.svg") : headline-tone == 2 ? @image-url("icons/pause.svg") : headline-tone == 3 ? @image-url("icons/warning.svg") : @image-url("icons/cloud-off.svg");
+                        }
+                        Rectangle { height: 6px; }
+                        Text { text: headline-title; color: Theme.text; font-size: 24px; font-weight: 700; wrap: word-wrap; }
+                        Text { text: headline-detail; color: Theme.text.with-alpha(0.75); font-size: 14px; wrap: word-wrap; }
+                        if headline-action != "": HorizontalLayout {
+                            alignment: start;
+                            padding-top: 10px;
+                            Button { text: headline-action; primary: true; clicked => { headline-clicked(headline-action); } }
+                        }
+                    }
+                }
+
+                for p in pending-devices: Card {
+                    tint: Theme.accent.with-alpha(0.12);
+                    VerticalLayout {
+                        padding: 18px;
+                        spacing: 4px;
+                        Body { text: "“" + p.name + "” wants to connect"; font-size: 16px; font-weight: 700; }
+                        Muted { text: "Only accept devices you own. Its code starts with " + p.short + "."; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            padding-top: 8px;
+                            Button { text: "Accept"; primary: true; clicked => { accept-device(p.id, p.name); } }
+                            Button { text: "Not now"; clicked => { dismiss-device(p.id); } }
+                        }
+                    }
+                }
+
+                for p in pending-folders: Card {
+                    tint: Theme.accent.with-alpha(0.12);
+                    VerticalLayout {
+                        padding: 18px;
+                        spacing: 4px;
+                        Body { text: p.device-name + " wants to share “" + p.label + "”"; font-size: 16px; font-weight: 700; }
+                        Muted { text: "Accept to keep a copy of this folder on this computer."; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            padding-top: 8px;
+                            Button {
+                                text: "Accept";
+                                primary: true;
+                                clicked => {
+                                    accept-item = p;
+                                    accept-path = "";
+                                    accept-open = true;
+                                }
+                            }
+                            Button { text: "Not now"; clicked => { dismiss-folder(p.id, p.device-id); } }
+                        }
+                    }
+                }
+
+                if engine-running: Title { text: "FOLDERS"; }
+                if engine-running && folders.length == 0: Card {
+                    VerticalLayout {
+                        padding: 18px;
+                        spacing: 4px;
+                        Body { text: "No folders yet"; font-weight: 700; }
+                        Muted { text: "When another device shares a folder, it shows up here to accept. You can also add one from this computer."; }
+                    }
+                }
+                for f in folders: Card {
+                    clickable: true;
+                    clicked => { open-folder(f.id); }
+                    VerticalLayout {
+                        padding: 16px;
+                        spacing: 10px;
+                        HorizontalLayout {
+                            spacing: 14px;
+                            Bubble { icon: @image-url("icons/folder.svg"); }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                Text { text: f.label; color: Theme.text; font-size: 16px; font-weight: 600; overflow: elide; }
+                                Text { text: f.path; color: Theme.muted; font-size: 12px; overflow: elide; }
+                            }
+                            VerticalLayout { alignment: center; Chip { text: f.state; tone: f.tone; } }
+                        }
+                        if f.syncing: VerticalLayout {
+                            spacing: 6px;
+                            ProgressLine { progress: f.progress; tint: Theme.tone(1); }
+                            Muted { text: f.detail; font-size: 12px; }
+                        }
+                    }
+                }
+
+                if engine-running: Title { text: "DEVICES"; }
+                if engine-running && devices.length == 0: Card {
+                    VerticalLayout {
+                        padding: 18px;
+                        spacing: 4px;
+                        Body { text: "No devices yet"; font-weight: 700; }
+                        Muted { text: "Pair your phone: open Tandem on it and scan this computer's code."; }
+                    }
+                }
+                for d in devices: Card {
+                    clickable: true;
+                    clicked => { open-device(d.id); }
+                    HorizontalLayout {
+                        padding: 16px;
+                        spacing: 14px;
+                        Bubble { icon: d.phone ? @image-url("icons/phone.svg") : @image-url("icons/laptop.svg"); tint: Theme.muted; }
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text { text: d.name; color: Theme.text; font-size: 16px; font-weight: 600; overflow: elide; }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: start;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle { width: 8px; height: 8px; border-radius: 4px; background: d.connected ? Theme.tone(0) : Theme.muted; }
+                                }
+                                Text { text: d.status; color: Theme.muted; font-size: 12px; }
+                            }
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── PAIR ─────────────
+        if page == 1: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header { title: "Pair a device"; go-back => { page = 0; } }
+                Card {
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 10px;
+                        Body { text: "This computer's code"; font-size: 16px; font-weight: 700; }
+                        Muted { text: "On your phone, open Tandem → Add → Pair a device, then scan this code."; }
+                        HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 240px;
+                                height: 240px;
+                                background: white;
+                                border-radius: 16px;
+                                Image { source: qr; width: 216px; height: 216px; image-rendering: pixelated; }
+                            }
+                        }
+                        Text { text: my-id; color: Theme.text; font-family: "monospace"; font-size: 12px; horizontal-alignment: center; wrap: word-wrap; }
+                        HorizontalLayout {
+                            alignment: center;
+                            Button { text: "Copy code"; clicked => { copy-text(my-id); } }
+                        }
+                    }
+                }
+                Card {
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 10px;
+                        Body { text: "Or add the other device's code"; font-size: 16px; font-weight: 700; }
+                        Muted { text: "In Tandem on your phone: Add → Pair a device → Copy, then paste it here."; }
+                        id-input := LineEdit { placeholder-text: "Device code"; }
+                        name-input := LineEdit { placeholder-text: "Name it (e.g. My phone)"; }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Add device";
+                                primary: true;
+                                enabled: id-input.text != "";
+                                clicked => {
+                                    add-device(id-input.text, name-input.text);
+                                    id-input.text = "";
+                                    name-input.text = "";
+                                }
+                            }
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── FOLDER ─────────────
+        if page == 2: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header { title: current-folder.label; go-back => { page = 0; } }
+                Card {
+                    tint: Theme.tone(current-folder.tone).with-alpha(Theme.dark ? 0.16 : 0.10);
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 6px;
+                        Text { text: current-folder.state; color: Theme.text; font-size: 22px; font-weight: 700; }
+                        if current-folder.syncing: ProgressLine { progress: current-folder.progress; tint: Theme.tone(1); }
+                        Body { text: current-folder.detail; }
+                    }
+                }
+                Card {
+                    VerticalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        Fact { label: "Location"; value: current-folder.path; }
+                        Fact { label: "Size"; value: current-folder.size; }
+                        Fact { label: "Shared with"; value: current-folder.shared; }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Button { text: current-folder.paused ? "Resume" : "Pause"; clicked => { folder-pause(current-folder.id, !current-folder.paused); } }
+                    Button { text: "Check for changes"; enabled: !current-folder.paused; clicked => { folder-rescan(current-folder.id); } }
+                    Button { text: "Open"; clicked => { folder-show(current-folder.path); } }
+                }
+                HorizontalLayout {
+                    spacing: 20px;
+                    alignment: start;
+                    padding-top: 6px;
+                    LinkButton { text: "Share with another device"; clicked => { prepare-choices(current-folder.id); confirm-action = "share"; } }
+                    LinkButton {
+                        text: "Stop syncing this folder";
+                        danger: true;
+                        clicked => {
+                            ask("Stop syncing “" + current-folder.label + "”?",
+                                "The files stay on this computer and on your other devices. They just won't update each other anymore.",
+                                "Stop syncing", "remove-folder:" + current-folder.id);
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── DEVICE ─────────────
+        if page == 3: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header { title: current-device.name; go-back => { page = 0; } }
+                Card {
+                    HorizontalLayout {
+                        padding: 20px;
+                        spacing: 16px;
+                        Bubble { size: 52px; icon: current-device.phone ? @image-url("icons/phone.svg") : @image-url("icons/laptop.svg"); tint: current-device.connected ? Theme.tone(0) : Theme.muted; }
+                        VerticalLayout {
+                            alignment: center;
+                            Text { text: current-device.connected ? "Connected" : "Not connected"; color: Theme.text; font-size: 22px; font-weight: 700; }
+                            Muted { text: current-device.status; }
+                        }
+                    }
+                }
+                Card {
+                    VerticalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        if current-device.address != "": Fact { label: "Connection"; value: current-device.address; }
+                        Fact { label: "Folders shared with it"; value: current-device.folders; }
+                        VerticalLayout {
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 2px;
+                            Muted { text: "Device code"; }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text { text: current-device.id; color: Theme.text; font-family: "monospace"; font-size: 12px; wrap: word-wrap; horizontal-stretch: 1; vertical-alignment: center; }
+                                Button { text: "Copy"; clicked => { copy-text(current-device.id); } }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 20px;
+                    alignment: start;
+                    LinkButton { text: "Rename"; clicked => { rename-target = current-device.id; rename-text = current-device.name; } }
+                    LinkButton {
+                        text: "Remove device";
+                        danger: true;
+                        clicked => {
+                            ask("Remove " + current-device.name + "?",
+                                "This computer will stop syncing with it. No files are deleted on either device.",
+                                "Remove", "remove-device:" + current-device.id);
+                        }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── SETTINGS ─────────────
+        if page == 4: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header { title: "Settings"; go-back => { page = 0; } }
+                Card {
+                    VerticalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 6px;
+                        padding-bottom: 6px;
+                        SettingRow {
+                            label: "Sync";
+                            detail: sync-on ? "On — folders stay up to date in the background" : "Off";
+                            checked <=> sync-on;
+                            toggled(v) => { toggle-sync(v); }
+                        }
+                        Rectangle { height: 1px; background: Theme.divider; }
+                        SettingRow {
+                            label: "Start when you log in";
+                            detail: "Keep folders in sync without opening Tandem";
+                            checked <=> autostart;
+                            toggled(v) => { set-autostart(v); }
+                        }
+                    }
+                }
+                Card {
+                    VerticalLayout {
+                        padding-left: 18px;
+                        padding-right: 18px;
+                        padding-top: 8px;
+                        padding-bottom: 8px;
+                        HorizontalLayout {
+                            Fact { label: "This computer's name"; value: my-name; horizontal-stretch: 1; }
+                            VerticalLayout { alignment: center; LinkButton { text: "Rename"; clicked => { rename-target = "self"; rename-text = my-name; } } }
+                        }
+                        Fact { label: "Sync engine"; value: engine-note; }
+                        Fact { label: "Version"; value: "Tandem 0.1 · Syncthing " + version; }
+                        HorizontalLayout {
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            alignment: start;
+                            LinkButton { text: "View engine log"; clicked => { load-log(); page = 6; } }
+                        }
+                    }
+                }
+                Muted { text: "Tandem keeps running its sync engine after you close this window. The window itself uses no resources when closed."; }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── ADD FOLDER ─────────────
+        if page == 5: ScrollView {
+            VerticalLayout {
+                padding: 20px;
+                padding-top: 8px;
+                spacing: 12px;
+                Header { title: "Add a folder"; go-back => { page = 0; } }
+                Card {
+                    clickable: true;
+                    clicked => { pick-folder("add"); }
+                    HorizontalLayout {
+                        padding: 16px;
+                        spacing: 14px;
+                        Bubble { icon: @image-url("icons/folder.svg"); }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Body { text: add-path == "" ? "Choose a folder…" : add-path; font-weight: 600; }
+                            Muted { text: "Click to pick a folder on this computer"; }
+                        }
+                    }
+                }
+                LineEdit { text <=> add-label; placeholder-text: "Name"; }
+                Title { text: "SHARE IT WITH"; }
+                if choices.length == 0: Muted { text: "No devices paired yet. You can share it later."; }
+                for c[i] in choices: CheckBox {
+                    text: c.name;
+                    checked: c.checked;
+                    toggled => { choices[i].checked = self.checked; }
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: "Start syncing";
+                        primary: true;
+                        enabled: add-path != "" && add-label != "";
+                        clicked => { add-folder(add-label, add-path); }
+                    }
+                }
+                Rectangle { vertical-stretch: 1; }
+            }
+        }
+
+        // ───────────── LOG ─────────────
+        if page == 6: VerticalLayout {
+            padding: 20px;
+            padding-top: 8px;
+            spacing: 12px;
+            Header {
+                title: "Engine log";
+                go-back => { page = 4; }
+                Rectangle { horizontal-stretch: 1; }
+                Button { text: "Refresh"; clicked => { load-log(); } }
+            }
+            TextEdit { text: log-text; read-only: true; font-size: 11px; vertical-stretch: 1; }
+        }
+
+        // ───────────── DIALOGS ─────────────
+        if accept-open || confirm-title != "" || rename-target != "" || confirm-action == "share": Rectangle {
+            background: #000000a0;
+            TouchArea { }
+            dialog := Rectangle {
+                width: min(parent.width - 40px, 440px);
+                height: inner.preferred-height;
+                background: Theme.card;
+                border-radius: 22px;
+                drop-shadow-blur: 24px;
+                drop-shadow-color: #00000060;
+                inner := VerticalLayout {
+                    padding: 24px;
+                    spacing: 10px;
+                    if accept-open: VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Where should “" + accept-item.label + "” go?"; color: Theme.text; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                        Muted { text: "Files from " + accept-item.device-name + " will be kept in this folder on your computer:"; }
+                        Card {
+                            tint: Theme.card-alt;
+                            clickable: true;
+                            clicked => { pick-folder("accept"); }
+                            VerticalLayout {
+                                padding: 14px;
+                                Body { text: accept-path == "" ? "~/" + accept-item.label : accept-path; font-weight: 600; }
+                                Muted { text: "Click to choose a different folder"; font-size: 12px; }
+                            }
+                        }
+                        Muted { text: "If the folder already has files, they'll be combined with the shared ones."; font-size: 12px; }
+                        HorizontalLayout {
+                            alignment: end;
+                            spacing: 8px;
+                            Button { text: "Cancel"; clicked => { accept-open = false; } }
+                            Button {
+                                text: "Start syncing";
+                                primary: true;
+                                clicked => {
+                                    accept-folder(accept-item.id, accept-item.label, accept-item.device-id, accept-path);
+                                    accept-open = false;
+                                }
+                            }
+                        }
+                    }
+                    if !accept-open && confirm-title != "": VerticalLayout {
+                        spacing: 10px;
+                        Text { text: confirm-title; color: Theme.text; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                        Body { text: confirm-body; }
+                        HorizontalLayout {
+                            alignment: end;
+                            spacing: 8px;
+                            padding-top: 6px;
+                            Button { text: "Cancel"; clicked => { confirm-title = ""; confirm-action = ""; } }
+                            Button {
+                                text: confirm-button;
+                                primary: true;
+                                clicked => {
+                                    confirmed(confirm-action);
+                                    confirm-title = "";
+                                    confirm-action = "";
+                                }
+                            }
+                        }
+                    }
+                    if !accept-open && confirm-title == "" && rename-target != "": VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Rename"; color: Theme.text; font-size: 18px; font-weight: 700; }
+                        LineEdit { text <=> rename-text; }
+                        HorizontalLayout {
+                            alignment: end;
+                            spacing: 8px;
+                            Button { text: "Cancel"; clicked => { rename-target = ""; } }
+                            Button {
+                                text: "Save";
+                                primary: true;
+                                enabled: rename-text != "";
+                                clicked => {
+                                    rename(rename-target, rename-text);
+                                    rename-target = "";
+                                }
+                            }
+                        }
+                    }
+                    if !accept-open && confirm-title == "" && rename-target == "" && confirm-action == "share": VerticalLayout {
+                        spacing: 10px;
+                        Text { text: "Share “" + current-folder.label + "” with"; color: Theme.text; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                        if choices.length == 0: Muted { text: "It's already shared with all your devices."; }
+                        for c[i] in choices: CheckBox {
+                            text: c.name;
+                            checked: c.checked;
+                            toggled => { choices[i].checked = self.checked; }
+                        }
+                        HorizontalLayout {
+                            alignment: end;
+                            spacing: 8px;
+                            Button { text: "Cancel"; clicked => { confirm-action = ""; } }
+                            Button {
+                                text: "Share";
+                                primary: true;
+                                enabled: choices.length > 0;
+                                clicked => {
+                                    folder-share(current-folder.id);
+                                    confirm-action = "";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // toast
+        if toast != "": Rectangle {
+            y: parent.height - self.height - 24px;
+            x: (parent.width - self.width) / 2;
+            width: min(parent.width - 40px, msg.preferred-width + 40px);
+            height: msg.preferred-height + 24px;
+            background: Theme.dark ? #e7ecea : #18201f;
+            border-radius: 12px;
+            msg := Text {
+                width: parent.width - 40px;
+                text: toast;
+                color: Theme.dark ? #18201f : #ffffff;
+                wrap: word-wrap;
+                horizontal-alignment: center;
+            }
+            Timer {
+                interval: 3.5s;
+                running: toast != "";
+                triggered => { toast = ""; }
+            }
+        }
+    }
+}

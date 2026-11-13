@@ -1,0 +1,24 @@
+[Unit]
+Description=Tandem sync engine (Syncthing, light mode)
+Documentation=https://github.com/derkarhanak/tandem
+StartLimitIntervalSec=60
+StartLimitBurst=4
+
+[Service]
+# Light mode, measured on a real folder: ~40% less memory than standard Syncthing, same CPU.
+#  STMONITORED=1   run without Syncthing's separate watchdog process (systemd restarts it instead)
+#  GOMEMLIMIT/GOGC hand unused memory back sooner (tighter values made CPU use jump, so not lower)
+Environment=STMONITORED=1 GOMEMLIMIT=40MiB GOGC=50 STNODEFAULTFOLDER=1 STNOUPGRADE=1
+Environment="STLOGFORMATTIMESTAMP=" STLOGFORMATLEVELSTRING=false STLOGFORMATLEVELSYSLOG=true
+# Same identity and settings folder as a regular Syncthing install, so paired devices keep working.
+ExecStart=%h/.local/lib/tandem/syncthing serve --no-browser --no-restart --home=%h/.local/state/syncthing --gui-address=http://127.0.0.1:8384
+Restart=on-failure
+RestartSec=2
+SuccessExitStatus=3 4
+RestartForceExitStatus=3 4
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
