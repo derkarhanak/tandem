@@ -10,6 +10,15 @@ Tandem uses [Syncthing](https://syncthing.net)'s sync engine underneath, so it w
 - **Folders**: progress, size, pause/resume, check for changes, share with another device, stop syncing (your files are kept).
 - **Devices**: connected or last seen, direct or through a relay, rename, remove.
 
+## Download
+
+Get the latest version from [**Releases**](https://github.com/derkarhanak/tandem/releases/latest):
+
+- **Android**: `tandem-<version>-android-arm64.apk`. Open it on your phone and allow installing from your browser or file manager when asked. Needs Android 8.0+ on a 64-bit (arm64) phone.
+- **Linux**: `tandem-<version>-linux-x86_64.tar.gz`. Extract it and run `./install.sh` (no sudo). It installs into `~/.local` and starts syncing in the background. Needs a 64-bit PC with glibc 2.35+ (Ubuntu 22.04, Debian 12, Fedora 36 or newer) and systemd. `./install.sh --remove` uninstalls it and keeps your folders.
+
+Then pair them: on the computer, open Tandem → **+** to show its code; on the phone, open Tandem → **Add** → **Pair a device** → **Scan its code**.
+
 ## Android app (`app/`)
 
 - **Sync rules**: only on Wi-Fi, only while charging, pause in Battery Saver, start when the phone turns on.
@@ -44,6 +53,8 @@ Built to be light:
 ```
 
 Needs Rust 1.85+ and Go 1.26+. No `-devel` packages are needed (fontconfig is loaded at runtime).
+
+To make release files, run `./gradlew assembleRelease` (signing key read from `~/.android/tandem-release.properties`) and build the desktop app inside an older distro (e.g. `rust:1-bookworm`) so it runs on glibc 2.35+. Then run `./scripts/package-release.sh <that binary>`.
 
 ### Switching from Syncthing
 

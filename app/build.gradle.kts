@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -16,8 +18,24 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // Release signing key lives outside the repo. Point TANDEM_SIGNING at a properties file with
+    // storeFile, storePassword, keyAlias and keyPassword (default: ~/.android/tandem-release.properties).
+    val signingFile = file(System.getenv("TANDEM_SIGNING") ?: "${System.getProperty("user.home")}/.android/tandem-release.properties")
+    val releaseSigning = if (signingFile.exists()) {
+        val p = Properties().apply { signingFile.inputStream().use { load(it) } }
+        signingConfigs.create("release") {
+            storeFile = file(p.getProperty("storeFile"))
+            storePassword = p.getProperty("storePassword")
+            keyAlias = p.getProperty("keyAlias")
+            keyPassword = p.getProperty("keyPassword")
+        }
+    } else null
+
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            signingConfig = releaseSigning
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
